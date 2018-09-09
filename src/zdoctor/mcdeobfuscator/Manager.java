@@ -23,14 +23,15 @@ import javax.swing.JTextField;
 import javax.swing.filechooser.FileNameExtensionFilter;
 
 import zdoctor.commons.utils.DebugUtil;
+import zdoctor.commons.utils.PrimitiveUtil;
 import zdoctor.commons.utils.StopWatch;
 import zdoctor.commons.utils.Util;
 import zdoctor.commons.utils.data.BinaryReader;
 import zdoctor.commons.utils.data.FileUtil;
-import zdoctor.commons.utils.data.NodeDictionary;
+import zdoctor.commons.utils.data.StringDictironary;
 import zdoctor.commons.utils.data.ZipUtil;
 import zdoctor.mcdeobfuscator.Constants.MapType;
-import zdoctor.mcdeobfuscator.modes.Deobfuscator;
+import zdoctor.mcdeobfuscator.modes.MCNameDeobfuscator;
 
 public class Manager {
 
@@ -69,13 +70,15 @@ public class Manager {
 	private static int progress;
 	private static final ArrayList<ZipEntry> targetEntries = new ArrayList<>();
 	private static final ArrayList<ZipEntry> miscEntries = new ArrayList<>();
-	private static NodeDictionary<String> dic = new NodeDictionary<>();
+	private static StringDictironary dic = new StringDictironary();
 	private static File mappingFile;
 	private static ZipFile inputZip;
 	private static ZipOutputStream zipOutputStream;
 	private static JTextField console;
 	private static StringBuilder log;
 	private static StopWatch stopWatch;
+	private static StringDictironary obfDic;
+	private static JButton startButton;
 
 	// Label & Gui Setters
 	public static void setInputLabel(JLabel label) {
@@ -111,6 +114,10 @@ public class Manager {
 		console = textField;
 	}
 
+	public static void setStartButton(JButton button) {
+		startButton = button;
+	}
+
 	// Update Gui Interface
 	public static void initialize() {
 		if (init)
@@ -120,7 +127,6 @@ public class Manager {
 		versions = VersionHandler.MAPPINGS;
 		searchField.setText(Constants.DEFAULT_SEARCH);
 
-		dic = new NodeDictionary<>();
 		reloadMapping();
 	}
 
@@ -141,7 +147,9 @@ public class Manager {
 
 		MapType type = (Constants.MapType) mapTypeBox.getSelectedItem();
 		String mcVersion = (String) mcVersionBox.getSelectedItem();
-		mappingsBox.setModel(new DefaultComboBoxModel<>(versions.get(mcVersion).get(type).toArray(new Long[0])));
+
+		ArrayList<Long> mappings = versions.get(mcVersion).getOrDefault(type, new ArrayList<Long>());
+		mappingsBox.setModel(new DefaultComboBoxModel<>(mappings.toArray(new Long[0])));
 
 		downloadOrLoadMapping();
 	}
@@ -153,38 +161,54 @@ public class Manager {
 		JComboBox<Long> mappingsBox = (JComboBox<Long>) mappingCombo[2];
 
 		MapType type = (Constants.MapType) mapTypeBox.getSelectedItem();
-		if (type == MapType.Live) {
+		String mcVersion = (String) mcVersionBox.getSelectedItem();
+
+		long mapping = 0L;
+		if (mappingsBox.getSelectedItem() != null)
+			mapping = (long) mappingsBox.getSelectedItem();
+
+		switch (type) {
+		case Live:
 			mappingFile = MappingCacheHandler.getLiveMapping();
-		} else {
-
-			String mcVersion = (String) mcVersionBox.getSelectedItem();
-			if (mappingsBox.getSelectedItem() == null)
-				return;
-
-			long mapping = (long) mappingsBox.getSelectedItem();
-
-			switch (type) {
-			case Daily:
-				mappingFile = MappingCacheHandler.getDailyMapping(mcVersion, mapping);
-				break;
-			case Stable:
-				mappingFile = MappingCacheHandler.getStableMapping(mcVersion, mapping);
-				break;
-			default:
-				break;
-			}
+			break;
+		case Daily:
+			mappingFile = MappingCacheHandler.getDailyMapping(mcVersion, mapping);
+			break;
+		case Stable:
+			mappingFile = MappingCacheHandler.getStableMapping(mcVersion, mapping);
+			break;
+		case Obf:
+			mappingFile = MappingCacheHandler.getDailyMapping(mcVersion, mapping);
+			break;
+		default:
+			return;
 		}
 
-		dic = new NodeDictionary<>();
+		dic = new StringDictironary();
+		obfDic = new StringDictironary();
 
 		try {
 			loadToDictionaryFromZip(mappingFile);
+			if (type == MapType.Obf) {
+				File obfMappingFile = MappingCacheHandler.getSRGMapping(mcVersion);
+				if (mappingFile != null && obfMappingFile != null)
+					loadObfToDictionaryFromZip(obfMappingFile);
+				mappingLabel.setText(Integer.toString(obfDic.count()));
+			} else
+				mappingLabel.setText(Integer.toString(dic.count()));
+
 		} catch (IOException e) {
 			e.printStackTrace();
 			DebugUtil.notifyUser("Error Parsing Zip", e.getLocalizedMessage());
 		}
 
-		mappingLabel.setText(Integer.toString(dic.count()));
+		search();
+	}
+
+	@SuppressWarnings("unchecked")
+	public static MapType getType() {
+		JComboBox<MapType> mapTypeBox = (JComboBox<MapType>) mappingCombo[0];
+		return (Constants.MapType) mapTypeBox.getSelectedItem();
 	}
 
 	public static void reset() {
@@ -206,6 +230,16 @@ public class Manager {
 			skipFirst = true;
 		}
 		mappingRefreshButton.setVisible(false);
+	}
+
+	public static void hideMiscMapping2() {
+		mappingCombo[1].setVisible(true);
+		mappingCombo[2].setVisible(false);
+		mappingRefreshButton.setVisible(false);
+	}
+
+	public static void disableStart(boolean b) {
+		startButton.setEnabled(!b);
 	}
 
 	public static void setMappingVisible(boolean visible) {
@@ -265,22 +299,55 @@ public class Manager {
 
 	public static void search() {
 		resultField.setListData(new String[0]);
-		if (searchField.getText().length() > 0) {
-			Object[] matches = dic.findMatches(searchField.getText().getBytes());
-			String[] list = new String[matches.length];
-			for (int i = 0; i < matches.length; i++) {
-				list[i] = (String) matches[i];
-			}
-			resultField.setListData(list);
-		}
 
+		switch (getType()) {
+		case Obf:
+			if (searchField.getText().length() > 0) {
+				String[] matches1 = obfDic.searchAll(searchField.getText());
+				String[] matches2 = dic.searchAll(searchField.getText());
+
+				String[] matches = new String[matches1.length + matches2.length];
+				int index = 0;
+				for (String match : matches1) {
+					matches[index++] = match;
+				}
+
+				index = 0;
+				for (String match : matches2) {
+					matches[matches1.length + index++] = match;
+				}
+				resultField.setListData(matches);
+			}
+			break;
+		default:
+			if (searchField.getText().length() > 0) {
+				String[] matches = dic.searchAll(searchField.getText());
+				resultField.setListData(matches);
+			}
+			break;
+		}
 	}
 
-	public static void find(String text) {
-		if (dic.hasKey(text))
-			searchField.setText(dic.lookUp(text));
-		else if (dic.hasValue(text))
-			searchField.setText(new String(dic.getKey(text)));
+	public static void autoFill(String text) {
+//		System.out.println(text);
+		switch (getType()) {
+		case Obf:
+			if (obfDic.hasKey(PrimitiveUtil.toCharacterArray(text)))
+				searchField.setText(text);
+			else if (obfDic.hasValue(text))
+				searchField.setText(PrimitiveUtil.toString(obfDic.getKeyOfValue(text)));
+			else if (dic.hasValue(text))
+				searchField.setText(
+						PrimitiveUtil.toString(obfDic.getKeyOfValue(PrimitiveUtil.toString(dic.getKeyOfValue(text)))));
+			break;
+		default:
+			if (dic.hasKey(PrimitiveUtil.toCharacterArray(text)))
+				searchField.setText(text);
+			else if (dic.hasValue(text))
+				searchField.setText(PrimitiveUtil.toString(dic.getKeyOfValue(text)));
+			break;
+		}
+
 		search();
 	}
 
@@ -347,6 +414,18 @@ public class Manager {
 			loadToDictionary(ZipUtil.extractEntry(zip, entry));
 		}
 		zip.close();
+		search();
+	}
+
+	private static void loadObfToDictionaryFromZip(File file) throws IOException {
+		ZipFile zip = new ZipFile(file);
+		Enumeration<? extends ZipEntry> entries = zip.entries();
+		while (entries.hasMoreElements()) {
+			ZipEntry entry = entries.nextElement();
+			if (entry.getName().equalsIgnoreCase(Constants.SRG_Entry))
+				loadObfToDictionary(ZipUtil.extractEntry(zip, entry));
+		}
+		zip.close();
 	}
 
 	public static void loadToDictionary(byte[] data) throws IOException {
@@ -357,9 +436,47 @@ public class Manager {
 			if (line.equalsIgnoreCase("searge,name,side,desc"))
 				continue;
 			String[] deobs = line.split(",");
-			dic.register(deobs[0], deobs[1]);
+			dic.register(PrimitiveUtil.toCharacterArray(deobs[0]), deobs[1]);
 		}
 		br.close();
+	}
+
+	public static void loadObfToDictionary(byte[] data) throws IOException {
+		StringDictironary tempDictionary = new StringDictironary();
+
+		BinaryReader br = new BinaryReader(data);
+
+		while (br.available() > 0) {
+			String line = br.readLine();
+			String[] deobs = line.split(" ");
+
+			Character[] key = null;
+			String value = null;
+
+			if (deobs[0].equalsIgnoreCase(Constants.SRG_CLASS_LOADER)) {
+				key = PrimitiveUtil.toCharacterArray(deobs[1]);
+				value = deobs[2];
+			} else if (deobs[0].equalsIgnoreCase(Constants.SRG_FIELD)) {
+				key = PrimitiveUtil.toCharacterArray(deobs[1]);
+				value = deobs[2];
+
+				String oldValue = value.substring(value.lastIndexOf('/') + 1);
+				if (dic.hasKey(oldValue)) {
+					String newValue = dic.lookUp(oldValue);
+					newValue = value.replace(oldValue, newValue);
+//					System.out.println(value + ":" + newValue);
+//					obfDic.register(value, newValue);
+					tempDictionary.register(newValue, value);
+					value = newValue;
+				}
+			} else
+				continue;
+
+			obfDic.register(key, value);
+
+		}
+		br.close();
+		dic = tempDictionary;
 	}
 
 	public static void loadToDictionary(File file) throws IOException {
@@ -373,7 +490,7 @@ public class Manager {
 			if (line.equalsIgnoreCase("searge,name,side,desc"))
 				continue;
 			String[] deobs = line.split(",");
-			dic.register(deobs[0], deobs[1]);
+			dic.register(PrimitiveUtil.toCharacterArray(deobs[0]), deobs[1]);
 		}
 
 		br.close();
@@ -409,6 +526,9 @@ public class Manager {
 		log(Constants.LOG, fileCount, count, stopWatch.getMillis() / 1000f);
 		writeToConsole(Constants.LOG, fileCount, count, stopWatch.getMillis() / 1000f);
 		System.out.println(String.format(Constants.LOG, fileCount, count, stopWatch.getMillis() / 1000f));
+
+		FileUtil.flushToFile("log.txt", log.toString().getBytes());
+
 		try {
 			zipOutputStream.close();
 			zipOutputStream = null;
@@ -422,6 +542,8 @@ public class Manager {
 
 	// Modes
 	public static void deobfuscate() {
+		MapType type = getType();
+
 		stopWatch.start();
 		miscEntries.forEach(entry -> {
 			byte[] data = ZipUtil.extractEntry(inputZip, entry);
@@ -430,9 +552,31 @@ public class Manager {
 		});
 		targetEntries.forEach(entry -> {
 			byte[] data = ZipUtil.extractEntry(inputZip, entry);
+			String entryName = entry.getName();
 			try {
-				data = Deobfuscator.deobfuscate(dic, data);
-				ZipUtil.writeToZip(zipOutputStream, entry.getName(), data);
+				switch (type) {
+				case Obf:
+//					String oldName = entryName.substring(0, entry.getName().lastIndexOf('.'));
+//					if (oldName.contains("\\"))
+//						oldName = oldName.substring(oldName.lastIndexOf('\\') + 1, oldName.length());
+//					if (oldName.contains("/"))
+//						oldName = oldName.substring(oldName.lastIndexOf('/') + 1);
+//
+//					System.out.println(oldName);
+//					if (obfDic.hasKey(oldName)) {
+//						String newName = obfDic.lookUp(oldName);
+//						entryName = entry.getName().replace(oldName, newName);
+//						log("Changed file name from '%s' to '%s'", entry.getName(), entryName);
+//						System.out.println(
+//								String.format("Changed file name from '%s' to '%s'", entry.getName(), entryName));
+//					}
+//					data = ObfDeobfuscator.deobfuscate(obfDic, data);
+					break;
+				default:
+					data = MCNameDeobfuscator.deobfuscate(dic, data);
+					break;
+				}
+				ZipUtil.writeToZip(zipOutputStream, entryName, data);
 			} catch (IOException e) {
 				e.printStackTrace();
 			}

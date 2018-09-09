@@ -109,6 +109,7 @@ public class VersionHandler {
 
 			mappings.put(MapType.Stable, stableVersions);
 			mappings.put(MapType.Daily, dailyVersions);
+			mappings.put(MapType.Obf, dailyVersions);
 			MAPPINGS.put(mcVersion, mappings);
 		}
 	}
@@ -127,6 +128,14 @@ public class VersionHandler {
 
 	public static String getStableURL(String mcVersion, long mapping) {
 		return String.format(Constants.STABLESURL, mapping, mcVersion, mapping, mcVersion);
+	}
+
+	public static String getSRGZip(String mcVersion) {
+		return String.format(Constants.SRG, mcVersion);
+	}
+
+	public static String getSRGURL(String mcVersion) {
+		return String.format(Constants.SRGURL, mcVersion, mcVersion);
 	}
 
 }

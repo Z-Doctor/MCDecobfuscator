@@ -80,7 +80,7 @@ public class Interface {
 		frmZdoctorDeobfuscator = new JFrame();
 		frmZdoctorDeobfuscator.getContentPane().setCursor(Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR));
 		frmZdoctorDeobfuscator.getContentPane().setBackground(Color.LIGHT_GRAY);
-		frmZdoctorDeobfuscator.setTitle("ZDoctor - Deobfuscator 3.0");
+		frmZdoctorDeobfuscator.setTitle("ZDoctor - Deobfuscator " + Constants.VERSION);
 		frmZdoctorDeobfuscator.setBounds(100, 100, 600, 400);
 		frmZdoctorDeobfuscator.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 		SpringLayout springLayout = new SpringLayout();
@@ -179,7 +179,8 @@ public class Interface {
 		btnStart.addMouseListener(new MouseAdapter() {
 			@Override
 			public void mouseClicked(MouseEvent e) {
-				Manager.start();
+				if (btnStart.isEnabled())
+					Manager.start();
 			}
 		});
 		springLayout.putConstraint(SpringLayout.SOUTH, btnStart, -5, SpringLayout.SOUTH,
@@ -191,6 +192,7 @@ public class Interface {
 			public void itemStateChanged(ItemEvent e) {
 				if (e.getStateChange() != ItemEvent.SELECTED)
 					return;
+
 				if (e.getItem() == Constants.MapType.Custom) {
 					Manager.hideMiscMapping();
 					Manager.loadCustomMapping();
@@ -201,6 +203,13 @@ public class Interface {
 					Manager.setMappingVisible(true);
 					Util.runThread(Manager::loadMappings);
 				}
+
+				if (e.getItem() == Constants.MapType.Obf) {
+//					Manager.hideMiscMapping2();
+//					Util.runThread(Manager::loadMappings);
+					Manager.disableStart(true);
+				} else
+					Manager.disableStart(false);
 			}
 		});
 		springLayout.putConstraint(SpringLayout.NORTH, mapType, -3, SpringLayout.NORTH, lblMapping);
@@ -210,6 +219,7 @@ public class Interface {
 
 		JComboBox<String> mcVersion = new JComboBox<>();
 		mcVersion.addItemListener(new ItemListener() {
+
 			public void itemStateChanged(ItemEvent e) {
 				if (e.getStateChange() != ItemEvent.SELECTED)
 					return;
@@ -331,7 +341,7 @@ public class Interface {
 					return;
 				String selected = resultList.getSelectedValue();
 				if (selected != null && !selected.equals(""))
-					Manager.find(selected);
+					Manager.autoFill(selected);
 			}
 		});
 		scrollPane2.setViewportView(resultList);
@@ -359,6 +369,6 @@ public class Interface {
 		Manager.setConsole(console);
 
 		Manager.setProgressBar(progressBar);
-
+		Manager.setStartButton(btnStart);
 	}
 }

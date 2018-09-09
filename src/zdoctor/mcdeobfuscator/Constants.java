@@ -2,8 +2,10 @@ package zdoctor.mcdeobfuscator;
 
 public class Constants {
 	public static enum MapType {
-		Daily, Stable, Live, Custom
+		Daily, Stable, Live, Custom, Obf
 	}
+
+	public static final String VERSION = "3.1";
 
 	public static final String DEFAULT_SEARCH = "- Search Text -";
 	public static final String ILLEGAL_CHAR = "[\\'\\\"*!@#%^&*()\"{}\\]\\[|\\?<>\\\\,. ;]";
@@ -31,4 +33,12 @@ public class Constants {
 	public static final String LIVE_ZIP = "Semi-Live.zip";
 
 	public static final String LOG = "Parsed '%d' files and replaced '%d' entries in '%.2f' seconds";
+
+	public static final String SRG_Entry = "joined.srg";
+	public static final String SRG_PACKAGE = "PK:";
+	public static final String SRG_CLASS_LOADER = "CL:";
+	public static final String SRG_FIELD = "FD:";
+	public static final String SRG_METHOD = "MD:";
+
+	
 }

@@ -17,10 +17,10 @@ public class MappingCacheHandler {
 			return map;
 
 		try {
-			byte[] versionJsonData = WebDownloader.downloadToArray(VersionHandler.getDailyURL(mcVersion, mapping));
-			if (versionJsonData.length <= 0)
+			byte[] data = WebDownloader.downloadToArray(VersionHandler.getDailyURL(mcVersion, mapping));
+			if (data.length <= 0)
 				return null;
-			FileUtil.flushToFile(map, versionJsonData);
+			FileUtil.flushToFile(map, data);
 			return map;
 		} catch (IOException e) {
 			e.printStackTrace();
@@ -34,10 +34,10 @@ public class MappingCacheHandler {
 			return map;
 
 		try {
-			byte[] versionJsonData = WebDownloader.downloadToArray(VersionHandler.getStableURL(mcVersion, mapping));
-			if (versionJsonData.length <= 0)
+			byte[] data = WebDownloader.downloadToArray(VersionHandler.getStableURL(mcVersion, mapping));
+			if (data.length <= 0)
 				return null;
-			FileUtil.flushToFile(map, versionJsonData);
+			FileUtil.flushToFile(map, data);
 			return map;
 		} catch (IOException e) {
 			e.printStackTrace();
@@ -70,6 +70,24 @@ public class MappingCacheHandler {
 
 		if (liveZip.exists())
 			return liveZip;
+		return null;
+	}
+
+	public static File getSRGMapping(String mcVersion) {
+		File map = new File(Constants.CACHE_FOLDER, VersionHandler.getSRGZip(mcVersion));
+		if (map.exists())
+			return map;
+
+		try {
+			byte[] data = WebDownloader.downloadToArray(VersionHandler.getSRGURL(mcVersion));
+			if (data.length <= 0)
+				return null;
+			FileUtil.flushToFile(map, data);
+			return map;
+		} catch (IOException e) {
+			e.printStackTrace();
+			Manager.writeToConsole("SRG file for MC Version '%s' does not exist", mcVersion);
+		}
 		return null;
 	}
 
